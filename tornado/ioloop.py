@@ -42,7 +42,11 @@ class Multiplex(object):
         pass
 
 class Kqueue(Multiplex):
-    """Kqueue Multiplexer"""
+    """Kqueue Multiplexer
+    
+    Broken in Python 2.6.2
+    http://bugs.python.org/issue5910
+    """
     FLAGS = select.KQ_FILTER_READ | select.KQ_FILTER_WRITE
 
     def __init__(self):
