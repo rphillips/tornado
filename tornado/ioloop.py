@@ -24,6 +24,47 @@ import os
 import select
 import time
 
+class Multiplex(object):
+    """A generic multiplex object"""
+    def __init__(self):
+        pass
+
+    def register(self, fd, events):
+        pass
+
+    def modify(self, fd, events):
+        pass
+
+    def unregister(self, fd):
+        pass
+
+    def poll(self, timeout):
+        pass
+
+class Kqueue(Multiplex):
+    """Kqueue Multiplexer"""
+    FLAGS = select.KQ_FILTER_READ | select.KQ_FILTER_WRITE
+
+    def __init__(self):
+        self._kq = select.kqueue()
+        self._fds = {}
+
+    def register(self, fd, events):
+        ev = select.kevent(fd, self.FLAGS, select.KQ_EV_ADD | select.KQ_EV_ENABLE)
+        self._fds[fd] = ev
+
+    def modify(self, fd, events):
+        self.unregister(fd)
+        self.register(fd, events)
+
+    def unregister(self, fd):
+        ev = select.kevent(fd, self.FLAGS, select.KQ_EV_DELETE)
+        del self._fds[fd]
+
+    def poll(self, timeout):
+        events = self._kq.control(self._fds.values(), len(self._fds), 3000)
+        return [(int(e.ident), e.filter) for e in events]
+        
 
 class IOLoop(object):
     """A level-triggered I/O loop.
@@ -264,7 +305,7 @@ class _Timeout(object):
                    (other.deadline, id(other.callback)))
 
 
-class _EPoll(object):
+class _EPoll(Multiplex):
     """An epoll-based event loop using our C module for Python 2.5 systems"""
     _EPOLL_CTL_ADD = 1
     _EPOLL_CTL_DEL = 2
@@ -286,7 +327,7 @@ class _EPoll(object):
         return epoll.epoll_wait(self._epoll_fd, int(timeout * 1000))
 
 
-class _Select(object):
+class _Select(Multiplex):
     """A simple, select()-based IOLoop implementation for non-Linux systems"""
     def __init__(self):
         self.read_fds = set()
@@ -320,12 +361,14 @@ class _Select(object):
             events[fd] = events.get(fd, 0) | IOLoop.ERROR
         return events.items()
 
-
 # Choose a poll implementation. Use epoll if it is available, fall back to
 # select() for non-Linux platforms
 if hasattr(select, "epoll"):
     # Python 2.6+ on Linux
     _poll = select.epoll
+elif hasattr(select, "kqueue"):
+    # Python 2.6+ on BSD or OSX
+    _poll = Kqueue
 else:
     try:
         # Linux systems with our C module installed
