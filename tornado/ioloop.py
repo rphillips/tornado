@@ -62,7 +62,7 @@ class Kqueue(Multiplex):
         del self._fds[fd]
 
     def poll(self, timeout):
-        events = self._kq.control(self._fds.values(), len(self._fds), 3000)
+        events = self._kq.control(self._fds.values(), len(self._fds), timeout * 1000)
         return [(int(e.ident), e.filter) for e in events]
         
 
